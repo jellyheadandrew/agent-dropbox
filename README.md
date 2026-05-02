@@ -8,28 +8,27 @@ Provide Dropbox-like file access to your AI agents across heterogeneous devices,
 
 ## What is Agent Dropbox?
 
-Agent Dropbox is an open-source, cross-platform file sync tool designed for AI agent workflows. Set up your own sync server on AWS, pair your devices, and keep designated folders automatically synchronized.
+Agent Dropbox is an open-source, cross-platform file sync tool designed for AI agent workflows. Install the server on any computer where you run your agents (EC2, Mac Mini, home server), pair your devices, and keep designated folders automatically synchronized.
 
-- **Bidirectional sync** — Changes on any device propagate to all others via S3
+- **Bidirectional sync** — Changes on any device propagate to all others
 - **Cross-platform** — Windows, macOS, Linux
 - **Self-hosted** — Your server, your data, your rules
 - **3-way diff** — Intelligent conflict detection with manual resolution UI
-- **Presigned URLs** — Files transfer directly to/from S3, server never touches your data
+- **AI agent integration** — OpenClaw or Hermes agents access synced files at `/shared_data/`
+- **No cloud account needed** — Files stored locally on the server (no AWS/S3 required)
 
 ## Quick Start
 
-### 1. Set up the server
-
-On your EC2 instance (Ubuntu 22.04+):
+### 1. Set up the server (any computer)
 
 ```bash
-git clone https://github.com/jellyheadandrew/agent-dropbox.git
-cd agent-dropbox/scripts
-chmod +x setup-server.sh
-./setup-server.sh
+curl -fsSL https://raw.githubusercontent.com/jellyheadandrew/agent-dropbox/main/scripts/install.sh | bash
 ```
 
-This installs the sync server, creates an S3 bucket, and generates your first pairing token.
+The interactive installer will:
+- Set up the sync server
+- Optionally install an AI agent (OpenClaw or Hermes)
+- Generate your first pairing token
 
 ### 2. Install the desktop app
 
@@ -48,21 +47,26 @@ Click "Add Folder", enter a name and local path. Files sync automatically.
 ## Architecture
 
 ```
-Desktop App (Tauri)          Sync Server (FastAPI)         AWS S3
+Desktop App (Tauri)          Sync Server (FastAPI)         Local Storage
      │                            │                          │
-     ├─ POST /sync/scan ────────►│  List S3 objects ───────►│
+     ├─ POST /sync/scan ────────►│  List files ────────────►│
      │◄── Remote manifest ───────┤                          │
      │                            │                          │
      │  (3-way diff on client)    │                          │
      │                            │                          │
-     ├─ POST /sync/resolve ─────►│  Presigned URLs ─────────│
+     ├─ POST /sync/resolve ─────►│  Signed URLs ────────────│
      │◄── Upload/download URLs ──┤                          │
      │                            │                          │
-     ├─ PUT/GET (presigned) ─────┼───── Direct transfer ───►│
-     │◄── File data ─────────────┼──────────────────────────┤
+     ├─ PUT/GET (signed URL) ───►│  Proxy file transfer ───►│
+     │◄── File data ─────────────┤◄─────────────────────────┤
+     │                            │                          │
+     │                       AI Agent Container              │
+     │                       (OpenClaw / Hermes)             │
+     │                            │   mounts local storage ──┤
+     │                            │   reads/writes files     │
 ```
 
-**The server never touches your file data.** It only issues presigned URLs and manages metadata.
+Files are stored on the server's local disk. The server proxies all file transfers via HMAC-signed URLs.
 
 ## Project Structure
 
@@ -70,6 +74,7 @@ Desktop App (Tauri)          Sync Server (FastAPI)         AWS S3
 agent-dropbox-open-source/
 ├── server/          # FastAPI sync server (Python)
 ├── desktop/         # Tauri v2 desktop app (Rust + React)
+├── agent/           # AI agent container (OpenClaw/Hermes)
 ├── website/         # Static website (HTML/CSS)
 ├── scripts/         # Setup and deployment scripts
 └── .github/         # CI/CD workflows
@@ -78,8 +83,7 @@ agent-dropbox-open-source/
 ## Generating Pairing Tokens
 
 ```bash
-cd server
-python ../scripts/generate-token.py --device-name "My Laptop"
+~/agent-dropbox/scripts/generate-token.sh --device-name "My Laptop"
 ```
 
 ## Cloud Service

@@ -34,6 +34,22 @@ from sync.schemas import (
 )
 from sync.service import SyncService
 
+# ── Service instance (set from main.py) ─────────────────────────────
+
+_sync_service: SyncService | None = None
+
+
+def set_sync_service(service: SyncService):
+    global _sync_service
+    _sync_service = service
+
+
+def _get_sync_service() -> SyncService:
+    if _sync_service is None:
+        raise HTTPException(status_code=500, detail="Sync service not initialized")
+    return _sync_service
+
+
 # ── Auth Router ──────────────────────────────────────────────────────
 
 auth_router = APIRouter(prefix="/auth", tags=["auth"])
@@ -128,27 +144,27 @@ sync_router = APIRouter(prefix="/sync", tags=["sync"])
 
 @sync_router.post("/scan", response_model=SyncScanResponse)
 async def sync_scan(req: SyncScanRequest, user: User = Depends(get_current_user)):
-    return SyncService.scan_remote(req, user.s3_prefix)
+    return _get_sync_service().scan_remote(req, user.s3_prefix)
 
 
 @sync_router.post("/resolve", response_model=SyncResolveResponse)
 async def sync_resolve(req: SyncResolveRequest, user: User = Depends(get_current_user)):
-    return SyncService.resolve_sync(req, user.s3_prefix)
+    return _get_sync_service().resolve_sync(req, user.s3_prefix)
 
 
 @sync_router.post("/verify", response_model=SyncVerifyResponse)
 async def sync_verify(req: SyncVerifyRequest, user: User = Depends(get_current_user)):
-    return SyncService.verify_files(req, user.s3_prefix)
+    return _get_sync_service().verify_files(req, user.s3_prefix)
 
 
 @sync_router.post("/multipart/init", response_model=MultipartInitResponse)
 async def multipart_init(req: MultipartInitRequest, user: User = Depends(get_current_user)):
-    return SyncService.init_multipart(req, user.s3_prefix)
+    return _get_sync_service().init_multipart(req, user.s3_prefix)
 
 
 @sync_router.post("/multipart/complete", response_model=MultipartCompleteResponse)
 async def multipart_complete(req: MultipartCompleteRequest, user: User = Depends(get_current_user)):
     try:
-        return SyncService.complete_multipart(req, user.s3_prefix)
+        return _get_sync_service().complete_multipart(req, user.s3_prefix)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))

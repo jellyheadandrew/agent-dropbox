@@ -4,8 +4,10 @@
 Usage:
     python generate-token.py --device-name "My Laptop"
     python generate-token.py --device-name "Work Desktop" --db ../server/agent_dropbox.db
+    python generate-token.py --device-name "Phone" --env-file /path/to/.env
 """
 import argparse
+import os
 import sqlite3
 import sys
 from pathlib import Path
@@ -15,13 +17,50 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "server"))
 from auth.token import generate_pairing_token, generate_s3_prefix, hash_token
 
 
+def load_env_file(env_path: str) -> None:
+    path = Path(env_path)
+    if not path.exists():
+        return
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if key not in os.environ:
+                os.environ[key] = value
+
+
 def main():
     parser = argparse.ArgumentParser(description="Generate Agent Dropbox pairing token")
     parser.add_argument("--device-name", required=True, help="Human-readable device name")
-    parser.add_argument("--db", default="agent_dropbox.db", help="Path to SQLite database file")
+    parser.add_argument("--db", default=None, help="Path to SQLite database file")
+    parser.add_argument("--env-file", default=None, help="Path to .env file (auto-detected if not specified)")
     args = parser.parse_args()
 
-    db_path = Path(args.db)
+    script_dir = Path(__file__).resolve().parent
+    install_dir = script_dir.parent
+
+    if args.env_file:
+        load_env_file(args.env_file)
+    else:
+        for candidate in [
+            install_dir / ".env",
+            install_dir / "server" / ".env",
+            Path.home() / "agent-dropbox" / ".env",
+        ]:
+            if candidate.exists():
+                load_env_file(str(candidate))
+                break
+
+    db_path = Path(args.db) if args.db else install_dir / "agent_dropbox.db"
+    if not db_path.exists():
+        server_db = install_dir / "server" / "agent_dropbox.db"
+        if server_db.exists():
+            db_path = server_db
+
     if not db_path.exists():
         conn = sqlite3.connect(str(db_path))
         conn.execute("""
